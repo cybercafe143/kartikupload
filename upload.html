@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Send Files — kartikdev</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:       #0a0a0a;
+    --card:     #111111;
+    --border:   #222222;
+    --border2:  #2a2a2a;
+    --accent:   #e8ff47;
+    --accent2:  #47ffe8;
+    --text:     #f5f5f5;
+    --muted:    #666666;
+    --danger:   #ff4747;
+    --success:  #47ff8c;
+    --r:        14px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Grain texture ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: 0.4;
+  }
+
+  /* ── Grid ── */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 80px 80px;
+    opacity: 0.25;
+  }
+
+  /* ── Page wrapper ── */
+  .page {
+    position: relative; z-index: 10;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 20px 60px;
+  }
+
+  /* ── Header bar ── */
+  .topbar {
+    width: 100%; max-width: 640px;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 28px 0 48px;
+    border-bottom: 1px solid var(--border2);
+    margin-bottom: 52px;
+  }
+  .brand {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px; letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .brand span { color: var(--accent); }
+  .status-pill {
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(71,255,140,0.08);
+    border: 1px solid rgba(71,255,140,0.2);
+    border-radius: 100px;
+    padding: 5px 12px;
+    font-size: 12px; font-weight: 500;
+    color: var(--success);
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success);
+    animation: blink 2.5s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  /* ── Main heading ── */
+  .hero { width: 100%; max-width: 640px; margin-bottom: 44px; }
+  .hero-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .hero-tag::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg, var(--accent) 0%, transparent 100%);
+    opacity: 0.4;
+  }
+  .hero h1 {
+    font-size: clamp(40px, 8vw, 68px);
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: 18px;
+  }
+  .hero h1 em {
+    font-style: normal;
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--accent);
+  }
+  .hero p {
+    font-size: 15px; font-weight: 300;
+    color: var(--muted); line-height: 1.6;
+    max-width: 440px;
+  }
+
+  /* ── Card ── */
+  .card {
+    width: 100%; max-width: 640px;
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 24px;
+    overflow: hidden;
+  }
+
+  /* ── Drop zone ── */
+  .dropzone {
+    position: relative;
+    min-height: 220px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px 32px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-bottom: 1px solid var(--border2);
+  }
+  .dropzone::before {
+    content: '';
+    position: absolute; inset: 10px;
+    border: 1.5px dashed var(--border2);
+    border-radius: 14px;
+    transition: border-color 0.2s;
+    pointer-events: none;
+  }
+  .dropzone:hover::before,
+  .dropzone.drag::before { border-color: var(--accent); }
+  .dropzone:hover,
+  .dropzone.drag { background: rgba(232,255,71,0.025); }
+
+  .dz-icon {
+    width: 60px; height: 60px;
+    border-radius: 18px;
+    background: rgba(232,255,71,0.06);
+    border: 1px solid rgba(232,255,71,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    margin-bottom: 18px;
+    transition: transform 0.2s;
+  }
+  .dropzone:hover .dz-icon { transform: translateY(-3px); }
+  .dz-text {
+    font-size: 16px; font-weight: 600; margin-bottom: 6px; text-align: center;
+  }
+  .dz-sub {
+    font-size: 13px; color: var(--muted); text-align: center; line-height: 1.5;
+  }
+  .dz-sub strong { color: var(--accent); font-weight: 600; cursor: pointer; }
+  .dz-sub strong:hover { text-decoration: underline; }
+  #fileInput { display: none; }
+
+  /* ── File preview list ── */
+  .file-list {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border2);
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .file-list::-webkit-scrollbar { width: 4px; }
+  .file-list::-webkit-scrollbar-track { background: transparent; }
+  .file-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+  .file-item {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    animation: slideIn 0.25s cubic-bezier(0.16,1,0.3,1) both;
+  }
+  @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .file-thumb {
+    width: 38px; height: 38px; border-radius: 8px;
+    object-fit: cover; flex-shrink: 0;
+    background: rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    overflow: hidden;
+  }
+  .file-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .file-info-txt { flex: 1; min-width: 0; }
+  .file-info-name {
+    font-size: 13px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .file-info-size { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .file-remove {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 16px; padding: 4px;
+    border-radius: 6px; transition: color 0.15s, background 0.15s;
+    flex-shrink: 0;
+  }
+  .file-remove:hover { color: var(--danger); background: rgba(255,71,71,0.1); }
+
+  /* ── Form fields ── */
+  .fields { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+
+  .field-group { display: flex; flex-direction: column; gap: 6px; }
+  .field-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .field-input {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+    resize: none;
+  }
+  .field-input::placeholder { color: var(--muted); }
+  .field-input:focus {
+    border-color: rgba(232,255,71,0.35);
+    background: rgba(232,255,71,0.02);
+  }
+
+  /* ── Submit ── */
+  .submit-area { padding: 0 24px 24px; }
+  .btn-send {
+    width: 100%;
+    padding: 16px 28px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    background: var(--accent);
+    color: #0a0a0a;
+    transition: transform 0.18s, box-shadow 0.18s, background 0.18s;
+    box-shadow: 0 4px 30px rgba(232,255,71,0.2);
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .btn-send:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 40px rgba(232,255,71,0.35);
+  }
+  .btn-send:active:not(:disabled) { transform: translateY(0); }
+  .btn-send:disabled {
+    background: var(--border2); color: var(--muted); cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-top-color: #0a0a0a;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Progress bar ── */
+  .progress-wrap {
+    display: none;
+    height: 3px;
+    background: var(--border);
+    border-radius: 0;
+    overflow: hidden;
+    margin: 0 24px 20px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+
+  /* ── Result ── */
+  .result {
+    display: none;
+    margin: 0 24px 24px;
+    padding: 16px 20px;
+    border-radius: 12px;
+    font-size: 14px; font-weight: 500;
+    display: none; align-items: center; gap: 12px;
+  }
+  .result.success {
+    background: rgba(71,255,140,0.07);
+    border: 1px solid rgba(71,255,140,0.25);
+    color: var(--success);
+  }
+  .result.error {
+    background: rgba(255,71,71,0.07);
+    border: 1px solid rgba(255,71,71,0.25);
+    color: var(--danger);
+  }
+  .result-icon { font-size: 20px; flex-shrink: 0; }
+  .result-text { line-height: 1.4; }
+
+  /* ── Info strip ── */
+  .info-strip {
+    width: 100%; max-width: 640px; margin-top: 28px;
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .info-chip {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 100px; padding: 6px 14px;
+  }
+  .info-chip span { font-size: 14px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 480px) {
+    .topbar { padding: 20px 0 32px; margin-bottom: 36px; }
+    .hero h1 { font-size: 44px; }
+    .dropzone { min-height: 170px; padding: 28px 20px; }
+    .fields { padding: 18px; }
+    .submit-area { padding: 0 18px 18px; }
+    .progress-wrap, .result { margin-left: 18px; margin-right: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="brand"><span>kartikdev</span>.best / upload</div>
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      Live
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-tag">Secure File Transfer</div>
+    <h1>Send <em>anything</em><br>to Kartik.</h1>
+    <p>Drop files here — photos, documents, videos, anything. They'll land straight in Telegram instantly.</p>
+  </div>
+
+  <!-- Upload card -->
+  <div class="card">
+
+    <!-- Drop zone -->
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <div class="dz-icon">📤</div>
+      <div class="dz-text">Drop files here</div>
+      <div class="dz-sub">or <strong onclick="event.stopPropagation();document.getElementById('fileInput').click()">browse files</strong> — images, docs, videos, archives</div>
+      <input type="file" id="fileInput" multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z"/>
+    </div>
+
+    <!-- File list -->
+    <div class="file-list" id="fileList"></div>
+
+    <!-- Fields -->
+    <div class="fields">
+      <div class="field-group">
+        <div class="field-label">Your Name</div>
+        <input class="field-input" type="text" id="senderName" placeholder="Who's sending this?" maxlength="60"/>
+      </div>
+      <div class="field-group">
+        <div class="field-label">Note (optional)</div>
+        <textarea class="field-input" id="senderMsg" placeholder="Add a quick message..." rows="2" maxlength="300"></textarea>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <!-- Result -->
+    <div class="result" id="result">
+      <div class="result-icon" id="resultIcon"></div>
+      <div class="result-text" id="resultText"></div>
+    </div>
+
+    <!-- Submit -->
+    <div class="submit-area">
+      <button class="btn-send" id="sendBtn" onclick="handleUpload()" disabled>
+        <span id="btnText">Select files first</span>
+        <div class="spinner" id="spinner"></div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Info chips -->
+  <div class="info-strip">
+    <div class="info-chip"><span>🔒</span> Files go straight to Telegram</div>
+    <div class="info-chip"><span>📦</span> Up to 50 MB per file</div>
+    <div class="info-chip"><span>⚡</span> Instant delivery</div>
+  </div>
+
+</div>
+
+<script>
+  const dropzone  = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileList  = document.getElementById('fileList');
+  const sendBtn   = document.getElementById('sendBtn');
+  const btnText   = document.getElementById('btnText');
+  const spinner   = document.getElementById('spinner');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressBar  = document.getElementById('progressBar');
+  const result    = document.getElementById('result');
+  const resultIcon= document.getElementById('resultIcon');
+  const resultText= document.getElementById('resultText');
+
+  let selectedFiles = [];
+
+  // ── Drag and drop ────────────────────────────────────────────
+  ['dragenter','dragover'].forEach(e =>
+    dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.add('drag'); })
+  );
+  ['dragleave','drop'].forEach(e =>
+    dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.remove('drag'); })
+  );
+  dropzone.addEventListener('drop', ev => {
+    addFiles(Array.from(ev.dataTransfer.files));
+  });
+  fileInput.addEventListener('change', () => {
+    addFiles(Array.from(fileInput.files));
+    fileInput.value = '';
+  });
+
+  // ── File helpers ─────────────────────────────────────────────
+  function fileIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    const map = { pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊',
+                  ppt:'📋', pptx:'📋', txt:'📃', zip:'🗜️', rar:'🗜️',
+                  '7z':'🗜️', mp4:'🎬', mov:'🎬', avi:'🎬', mkv:'🎬',
+                  mp3:'🎵', wav:'🎵' };
+    return map[ext] || '📁';
+  }
+  function isImg(name) { return /\.(png|jpe?g|gif|webp|bmp)$/i.test(name); }
+  function fmtSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+    return (b/(1024*1024)).toFixed(1) + ' MB';
+  }
+
+  function addFiles(files) {
+    files.forEach(f => {
+      if (!selectedFiles.find(x => x.name === f.name && x.size === f.size))
+        selectedFiles.push(f);
+    });
+    renderList();
+  }
+
+  function removeFile(idx) {
+    selectedFiles.splice(idx, 1);
+    renderList();
+  }
+
+  function renderList() {
+    if (!selectedFiles.length) {
+      fileList.style.display = 'none';
+      sendBtn.disabled = true;
+      btnText.textContent = 'Select files first';
+      return;
+    }
+    fileList.style.display = 'flex';
+    sendBtn.disabled = false;
+    btnText.textContent = `Send ${selectedFiles.length} file${selectedFiles.length>1?'s':''} →`;
+
+    fileList.innerHTML = selectedFiles.map((f, i) => `
+      <div class="file-item">
+        <div class="file-thumb">
+          ${isImg(f.name)
+            ? `<img src="${URL.createObjectURL(f)}" alt="">`
+            : fileIcon(f.name)}
+        </div>
+        <div class="file-info-txt">
+          <div class="file-info-name">${f.name}</div>
+          <div class="file-info-size">${fmtSize(f.size)}</div>
+        </div>
+        <button class="file-remove" onclick="removeFile(${i})" title="Remove">✕</button>
+      </div>
+    `).join('');
+  }
+
+  // ── Upload ───────────────────────────────────────────────────
+  async function handleUpload() {
+    if (!selectedFiles.length) return;
+
+    const name = document.getElementById('senderName').value.trim();
+    const msg  = document.getElementById('senderMsg').value.trim();
+
+    // UI: loading state
+    sendBtn.disabled = true;
+    btnText.textContent = 'Sending…';
+    spinner.style.display = 'block';
+    progressWrap.style.display = 'block';
+    progressBar.style.width = '0%';
+    result.style.display = 'none';
+    result.className = 'result';
+
+    // Fake progress while uploading
+    let prog = 0;
+    const tick = setInterval(() => {
+      prog = Math.min(prog + Math.random() * 12, 88);
+      progressBar.style.width = prog + '%';
+    }, 200);
+
+    try {
+      const fd = new FormData();
+      fd.append('name', name || 'Anonymous');
+      fd.append('message', msg);
+      selectedFiles.forEach(f => fd.append('files', f));
+
+      const res = await fetch('/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+
+      clearInterval(tick);
+      progressBar.style.width = '100%';
+
+      setTimeout(() => {
+        progressWrap.style.display = 'none';
+        progressBar.style.width = '0%';
+
+        if (data.success) {
+          showResult('success', '✅', data.message || 'Files sent successfully!');
+          selectedFiles = [];
+          renderList();
+        } else {
+          showResult('error', '❌', data.error || 'Something went wrong. Try again.');
+          sendBtn.disabled = false;
+          btnText.textContent = `Retry (${selectedFiles.length} file${selectedFiles.length>1?'s':''})`;
+        }
+      }, 400);
+
+    } catch (err) {
+      clearInterval(tick);
+      progressWrap.style.display = 'none';
+      showResult('error', '❌', 'Network error — check your connection and try again.');
+      sendBtn.disabled = false;
+      btnText.textContent = 'Retry';
+    } finally {
+      spinner.style.display = 'none';
+    }
+  }
+
+  function showResult(type, icon, text) {
+    result.className = `result ${type}`;
+    resultIcon.textContent = icon;
+    resultText.textContent = text;
+    result.style.display = 'flex';
+  }
+</script>
+</body>
+</html>
