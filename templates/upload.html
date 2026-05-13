@@ -418,7 +418,7 @@
   <!-- Info chips -->
   <div class="info-strip">
     <div class="info-chip"><span>🔒</span> Files go straight to Telegram</div>
-    <div class="info-chip"><span>📦</span> Up to 50 MB per file</div>
+    <div class="info-chip"><span>📦</span> Up to 500 MB per file</div>
     <div class="info-chip"><span>⚡</span> Instant delivery</div>
   </div>
 
@@ -510,65 +510,105 @@
     `).join('');
   }
 
-  // ── Upload ───────────────────────────────────────────────────
-  async function handleUpload() {
+  // ── Upload with real XHR progress (works for large files/videos) ──
+  function handleUpload() {
     if (!selectedFiles.length) return;
 
     const name = document.getElementById('senderName').value.trim();
     const msg  = document.getElementById('senderMsg').value.trim();
 
-    // UI: loading state
+    // Warn if total size > 100MB
+    const totalMB = selectedFiles.reduce((s, f) => s + f.size, 0) / (1024*1024);
+    if (totalMB > 100) {
+      btnText.textContent = `Sending ${totalMB.toFixed(0)} MB… this may take a while ⏳`;
+    }
+
     sendBtn.disabled = true;
-    btnText.textContent = 'Sending…';
     spinner.style.display = 'block';
     progressWrap.style.display = 'block';
     progressBar.style.width = '0%';
     result.style.display = 'none';
     result.className = 'result';
 
-    // Fake progress while uploading
-    let prog = 0;
-    const tick = setInterval(() => {
-      prog = Math.min(prog + Math.random() * 12, 88);
-      progressBar.style.width = prog + '%';
-    }, 200);
+    const fd = new FormData();
+    fd.append('name', name || 'Anonymous');
+    fd.append('message', msg);
+    selectedFiles.forEach(f => fd.append('files', f));
 
-    try {
-      const fd = new FormData();
-      fd.append('name', name || 'Anonymous');
-      fd.append('message', msg);
-      selectedFiles.forEach(f => fd.append('files', f));
+    const xhr = new XMLHttpRequest();
 
-      const res = await fetch('/upload', { method: 'POST', body: fd });
-      const data = await res.json();
+    // ── Real upload progress ──
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 80); // 0-80% = uploading
+        progressBar.style.width = pct + '%';
+        btnText.textContent = `Uploading… ${pct}%`;
+      }
+    });
 
-      clearInterval(tick);
+    // ── Upload done, now server is forwarding to Telegram ──
+    xhr.upload.addEventListener('load', () => {
+      progressBar.style.width = '85%';
+      btnText.textContent = 'Sending to Telegram…';
+
+      // Animate remaining 85→100% slowly while server processes
+      let p = 85;
+      const tick = setInterval(() => {
+        p = Math.min(p + 0.5, 98);
+        progressBar.style.width = p + '%';
+      }, 300);
+      xhr._tick = tick;
+    });
+
+    xhr.addEventListener('load', () => {
+      clearInterval(xhr._tick);
       progressBar.style.width = '100%';
+      spinner.style.display = 'none';
 
       setTimeout(() => {
         progressWrap.style.display = 'none';
         progressBar.style.width = '0%';
 
-        if (data.success) {
-          showResult('success', '✅', data.message || 'Files sent successfully!');
-          selectedFiles = [];
-          renderList();
-        } else {
-          showResult('error', '❌', data.error || 'Something went wrong. Try again.');
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (data.success) {
+            showResult('success', '✅', data.message || 'Files sent!');
+            selectedFiles = [];
+            renderList();
+          } else {
+            showResult('error', '❌', data.error || 'Something went wrong.');
+            sendBtn.disabled = false;
+            btnText.textContent = `Retry →`;
+          }
+        } catch {
+          showResult('error', '❌', 'Unexpected server response.');
           sendBtn.disabled = false;
-          btnText.textContent = `Retry (${selectedFiles.length} file${selectedFiles.length>1?'s':''})`;
+          btnText.textContent = 'Retry →';
         }
       }, 400);
+    });
 
-    } catch (err) {
-      clearInterval(tick);
-      progressWrap.style.display = 'none';
-      showResult('error', '❌', 'Network error — check your connection and try again.');
-      sendBtn.disabled = false;
-      btnText.textContent = 'Retry';
-    } finally {
+    xhr.addEventListener('error', () => {
+      clearInterval(xhr._tick);
       spinner.style.display = 'none';
-    }
+      progressWrap.style.display = 'none';
+      showResult('error', '❌', 'Network error — check connection and try again.');
+      sendBtn.disabled = false;
+      btnText.textContent = 'Retry →';
+    });
+
+    xhr.addEventListener('timeout', () => {
+      clearInterval(xhr._tick);
+      spinner.style.display = 'none';
+      progressWrap.style.display = 'none';
+      showResult('error', '⏱️', 'Timed out — file too large or slow connection. Try a smaller file.');
+      sendBtn.disabled = false;
+      btnText.textContent = 'Retry →';
+    });
+
+    xhr.timeout = 600000; // 10 min timeout for very large files
+    xhr.open('POST', '/upload');
+    xhr.send(fd);
   }
 
   function showResult(type, icon, text) {
